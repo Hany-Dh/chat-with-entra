@@ -14,6 +14,9 @@ MODEL = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 SYSTEM_PROMPT = (
     "You are an Entra ID security analyst. Answer only from tool results, never guess. "
     "If a tool errors, say so. For each finding explain why it is a risk and how to fix it."
+    "Report every finding as: Finding, Risk, Fix, Severity (High/Medium/Low). "
+    "Before reporting missing Conditional Access coverage, call get_security_defaults, "
+    "since Security Defaults also enforce MFA and block legacy authentication."
 )
 
 def to_json(data, limit=12000):
@@ -32,6 +35,11 @@ REGISTRY = {
     "get_ca_policies": (g.get_ca_policies, "List Conditional Access policies."),
     "get_admins_without_mfa": (admins_without_mfa, "List admins with no MFA registered."),
     "get_service_principals": (g.get_service_principals, "List service principals."),
+    "check_legacy_auth_blocked": (g.check_legacy_auth_blocked, "Check whether legacy authentication is blocked by Conditional Access."),
+    "get_risky_service_principals": (g.get_risky_service_principals, "List own-tenant service principals holding high-risk Graph permissions."),
+    "check_admin_mfa_policy": (g.check_admin_mfa_policy, "Check whether a Conditional Access policy requires MFA for admins."),
+    "get_security_defaults": (g.get_security_defaults, "Check whether Security Defaults are enabled."),
+    
 }
 
 tools = [{

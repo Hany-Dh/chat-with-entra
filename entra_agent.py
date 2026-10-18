@@ -39,6 +39,18 @@ REGISTRY = {
     "get_risky_service_principals": (g.get_risky_service_principals, "List own-tenant service principals holding high-risk Graph permissions."),
     "check_admin_mfa_policy": (g.check_admin_mfa_policy, "Check whether a Conditional Access policy requires MFA for admins."),
     "get_security_defaults": (g.get_security_defaults, "Check whether Security Defaults are enabled."),
+    "get_user_owned_objects": (lambda upn="david.martinez@wwlx961259.onmicrosoft.com": g.get_user_owned_objects(upn), "List objects owned by a given user (by UPN)."),
+    "get_sp_role_assignments": (g.get_sp_role_assignments, "Get app role assignments and OAuth2 grants for a service principal by its object id."),
+    "get_user_owned_devices": (g.get_user_owned_devices, "List devices owned by a given user, by UPN."),
+    "get_user_owned_groups": (g.get_user_owned_groups, "List groups owned by a given user, by UPN."),
+    "get_sp_directory_roles": (g.get_sp_directory_roles, "List directory roles a service principal is a member of, by its object id."),
+    "get_role_members": (g.get_role_members, "List users and service principals holding a given directory role, by role display name."),
+    
+}
+
+CUSTOM_SCHEMA_TOOLS = {
+    "get_sp_role_assignments", "get_user_owned_devices",
+    "get_user_owned_groups", "get_sp_directory_roles", "get_role_members",
     
 }
 
@@ -48,7 +60,84 @@ tools = [{
         "name": name, "description": desc,
         "parameters": {"type": "object", "properties": {}},
     },
-} for name, (_, desc) in REGISTRY.items()]
+} for name, (_, desc) in REGISTRY.items() if name not in CUSTOM_SCHEMA_TOOLS]
+
+tools.append({
+    "type": "function",
+    "function": {
+        "name": "get_sp_role_assignments",
+        "description": REGISTRY["get_sp_role_assignments"][1],
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sp_id": {"type": "string", "description": "The service principal's object id (not appId)."}
+            },
+            "required": ["sp_id"],
+        },
+    },
+})
+
+tools.append({
+    "type": "function",
+    "function": {
+        "name": "get_user_owned_devices",
+        "description": REGISTRY["get_user_owned_devices"][1],
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "upn": {"type": "string", "description": "User principal name, e.g. david.martinez@wwlx961259.onmicrosoft.com"}
+            },
+            "required": ["upn"],
+        },
+    },
+})
+
+tools.append({
+    "type": "function",
+    "function": {
+        "name": "get_user_owned_groups",
+        "description": REGISTRY["get_user_owned_groups"][1],
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "upn": {"type": "string", "description": "User principal name, e.g. david.martinez@wwlx961259.onmicrosoft.com"}
+            },
+            "required": ["upn"],
+        },
+    },
+})
+
+tools.append({
+    "type": "function",
+    "function": {
+        "name": "get_sp_directory_roles",
+        "description": REGISTRY["get_sp_directory_roles"][1],
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sp_id": {"type": "string", "description": "The service principal's object id (not appId)."}
+            },
+            "required": ["sp_id"],
+        },
+    },
+})
+
+tools.append({
+    "type": "function",
+    "function": {
+        "name": "get_role_members",
+        "description": REGISTRY["get_role_members"][1],
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "role_name": {"type": "string", "description": "Exact directory role display name, e.g. 'Privileged Authentication Administrator'"}
+            },
+            "required": ["role_name"],
+        },
+    },
+})
+
+###########################
 
 messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
@@ -61,9 +150,11 @@ while True:
     while True:
         response = client.chat.completions.create(
             model=MODEL, messages=messages, tools=tools,
-            max_completion_tokens=4000,
+            max_completion_tokens=8000,
         )
         msg = response.choices[0].message
+        # print("finish_reason:", response.choices[0].finish_reason)  # debug 
+        # print("usage:", response.usage)                             # debug
         messages.append(msg)
 
         if not msg.tool_calls:
@@ -73,7 +164,8 @@ while True:
         for call in msg.tool_calls:
             print(f"[tool called: {call.function.name}]")
             try:
-                result = to_json(REGISTRY[call.function.name][0]())
+                args = json.loads(call.function.arguments or "{}")          # updated
+                result = to_json(REGISTRY[call.function.name][0](**args))   # updated
             except Exception as e:
                 result = f"ERROR: {e}"
             messages.append({"role": "tool", "tool_call_id": call.id, "content": result})

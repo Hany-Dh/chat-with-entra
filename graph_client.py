@@ -141,7 +141,49 @@ def get_security_defaults():
     )
     r.raise_for_status()
     return {"security_defaults_enabled": r.json().get("isEnabled")}
-#############################
+
+def get_user_owned_objects(upn: str):
+    user = graph_get(f"/users/{upn}")
+    # Graph SDK-style owned objects isn't a plain GET path; use directoryObjects
+    return graph_get(f"/users/{upn}/ownedObjects")
+
+def get_sp_role_assignments(sp_id: str):
+    """What app roles a service principal has been granted on other resources, and who/what holds roles on it."""
+    return {
+        "granted_to_this_sp": graph_get(f"/servicePrincipals/{sp_id}/appRoleAssignments"),
+        "assigned_on_this_sp": graph_get(f"/servicePrincipals/{sp_id}/appRoleAssignedTo"),
+        "oauth2_grants": graph_get(f"/oauth2PermissionGrants?$filter=clientId eq '{sp_id}'"),
+    }
+    
+def get_user_owned_devices(upn: str):
+    return graph_get(f"/users/{upn}/ownedDevices?$select=displayName,deviceId,operatingSystem,trustType,accountEnabled")
+
+def get_user_owned_groups(upn: str):
+    return graph_get(f"/users/{upn}/ownedObjects/microsoft.graph.group?$select=displayName,id")
+
+def get_sp_directory_roles(sp_id: str):
+    assignments = graph_get(f"/roleManagement/directory/roleAssignments?$filter=principalId eq '{sp_id}'&$expand=roleDefinition")
+    return [a["roleDefinition"]["displayName"] for a in assignments]
+
+def get_role_members(role_name: str):
+    """List users and service principals holding a given directory role, by role display name."""
+    roles = graph_get(f"/roleManagement/directory/roleDefinitions?$filter=displayName eq '{role_name}'")
+    if not roles:
+        return {"error": f"No role found named '{role_name}'"}
+    role_id = roles[0]["id"]
+    assignments = graph_get(
+        f"/roleManagement/directory/roleAssignments?$filter=roleDefinitionId eq '{role_id}'&$expand=principal"
+    )
+    return [
+        {
+            "name": a["principal"].get("displayName") or a["principal"].get("appId"),
+            "type": a["principal"].get("@odata.type", "").split(".")[-1],
+            "id": a["principal"]["id"],
+        }
+        for a in assignments
+    ]
+    
+############################
 
 
 if __name__ == "__main__":
